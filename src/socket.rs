@@ -14,11 +14,9 @@ use cvt;
 // SOCK_CLOEXEC here for other platforms. Note that the dummy constant isn't
 // actually ever used (the blocks below are wrapped in `if cfg!` as well.
 #[cfg(target_os = "linux")]
-use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK};
+use libc::SOCK_CLOEXEC;
 #[cfg(not(target_os = "linux"))]
 const SOCK_CLOEXEC: c_int = 0;
-#[cfg(not(target_os = "linux"))]
-const SOCK_NONBLOCK: c_int = 0;
 
 pub struct Socket {
     fd: c_int,
@@ -33,7 +31,7 @@ impl Socket {
             // 2.6.18 as a kernel, so if the returned error is EINVAL we
             // fallthrough to the fallback.
             if cfg!(target_os = "linux") {
-                let flags = ty | SOCK_CLOEXEC | SOCK_NONBLOCK;
+                let flags = ty | SOCK_CLOEXEC;
                 match cvt(libc::socket(libc::AF_UNIX, flags, 0)) {
                     Ok(fd) => return Ok(Socket { fd: fd }),
                     Err(ref e) if e.raw_os_error() == Some(libc::EINVAL) => {}
@@ -43,8 +41,6 @@ impl Socket {
 
             let fd = Socket { fd: try!(cvt(libc::socket(libc::AF_UNIX, ty, 0))) };
             try!(cvt(libc::ioctl(fd.fd, libc::FIOCLEX)));
-            let mut nonblocking = 1 as c_ulong;
-            try!(cvt(libc::ioctl(fd.fd, libc::FIONBIO, &mut nonblocking)));
             Ok(fd)
         }
     }
@@ -55,7 +51,7 @@ impl Socket {
 
             // Like above, see if we can set cloexec atomically
             if cfg!(target_os = "linux") {
-                let flags = ty | SOCK_CLOEXEC | SOCK_NONBLOCK;
+                let flags = ty | SOCK_CLOEXEC;
                 match cvt(libc::socketpair(libc::AF_UNIX, flags, 0, fds.as_mut_ptr())) {
                     Ok(_) => {
                         return Ok((Socket { fd: fds[0] }, Socket { fd: fds[1] }))
